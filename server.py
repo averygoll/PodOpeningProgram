@@ -24,14 +24,27 @@ def qr_page(): return send_from_directory(BASE, 'index.html')
 @app.route('/tunnel.txt')
 def tunnel_txt(): return send_from_directory(BASE, 'tunnel.txt')
 @app.route('/status')
-def status(): return jsonify(uploaded=os.path.exists(os.path.join(BASE, 'latest.mp3')))
+def status():
+    """Report whether an upload has fully completed."""
+    return jsonify(uploaded=os.path.exists(os.path.join(BASE, 'latest.mp3'))
+                          and not os.path.exists(os.path.join(BASE, 'latest.uploading')))
 @app.route('/upload-ui')
 def upload_ui(): return send_from_directory(BASE, 'upload.html')
 @app.route('/upload', methods=['POST'])
 def upload():
+    """Accept an audio upload and atomically place it as latest.mp3."""
     f = request.files.get('file')
-    if not f: return jsonify(error='no file'), 400
-    f.save(os.path.join(BASE, 'latest.mp3'))
+    if not f:
+        return jsonify(error='no file'), 400
+
+    tmp = os.path.join(BASE, 'latest.uploading')
+    final = os.path.join(BASE, 'latest.mp3')
+
+    # ensure any previous tmp file is removed
+    if os.path.exists(tmp):
+        os.remove(tmp)
+    f.save(tmp)
+    os.replace(tmp, final)
     return jsonify(ok=True)
 @app.route('/trim-ui')
 def trim_ui(): return send_from_directory(BASE, 'trim.html')
@@ -42,8 +55,15 @@ def trim():
     end = data.get('end')
     infile = os.path.join(BASE, 'latest.mp3')
     outfile = os.path.join(BASE, 'trimmed.mp3')
-    subprocess.run(['ffmpeg','-y','-i',infile,'-ss',str(start),'-to',str(end),'-c','copy',outfile],
-                   stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+
+    ffmpeg = os.environ.get('FFMPEG', 'ffmpeg')
+    proc = subprocess.run(
+        [ffmpeg, '-y', '-i', infile, '-ss', str(start), '-to', str(end), '-c', 'copy', outfile],
+        stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
+    )
+    if proc.returncode != 0 or not os.path.exists(outfile) or os.path.getsize(outfile) == 0:
+        return jsonify(error='ffmpeg failed', stderr=proc.stderr), 500
+
     url = request.host_url.rstrip('/') + '/trimmed.mp3'
     return jsonify(url=url)
 @app.route('/latest.mp3')
