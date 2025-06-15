@@ -55,8 +55,15 @@ def trim():
     end = data.get('end')
     infile = os.path.join(BASE, 'latest.mp3')
     outfile = os.path.join(BASE, 'trimmed.mp3')
-    subprocess.run(['ffmpeg','-y','-i',infile,'-ss',str(start),'-to',str(end),'-c','copy',outfile],
-                   stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+
+    ffmpeg = os.environ.get('FFMPEG', 'ffmpeg')
+    proc = subprocess.run(
+        [ffmpeg, '-y', '-i', infile, '-ss', str(start), '-to', str(end), '-c', 'copy', outfile],
+        stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
+    )
+    if proc.returncode != 0 or not os.path.exists(outfile) or os.path.getsize(outfile) == 0:
+        return jsonify(error='ffmpeg failed', stderr=proc.stderr), 500
+
     url = request.host_url.rstrip('/') + '/trimmed.mp3'
     return jsonify(url=url)
 @app.route('/latest.mp3')
