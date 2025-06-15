@@ -16,7 +16,7 @@
   <script>
     async function loadQR() {
       try {
-        const txt = await fetch('/tunnel.txt').then(r => r.text());
+        const txt = await fetch('/tunnel.txt?ts=' + Date.now()).then(r => r.text());
         const m = txt.match(/PUBLIC_URL=(https:\/\/[-\w.]+\.trycloudflare\.com)/);
         if (m) {
           const url = m[1] + '/upload-ui';
