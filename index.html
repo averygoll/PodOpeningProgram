@@ -14,16 +14,20 @@
   </div>
   <p id="msg" class="text-gray-500 italic">Waiting for upload...</p>
   <script>
-    fetch("/tunnel.txt")
-      .then(r => r.text())
-      .then(txt => {
+    async function loadQR() {
+      try {
+        const txt = await fetch('/tunnel.txt?ts=' + Date.now()).then(r => r.text());
         const m = txt.match(/PUBLIC_URL=(https:\/\/[-\w.]+\.trycloudflare\.com)/);
         if (m) {
-          const url = m[1] + "/upload-ui";
-          document.getElementById("qr").src =
-            "https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=" + encodeURIComponent(url);
+          const url = m[1] + '/upload-ui';
+          document.getElementById('qr').src =
+            'https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=' + encodeURIComponent(url);
+          return;
         }
-      });
+      } catch(e){}
+      setTimeout(loadQR, 1000);
+    }
+    loadQR();
     function check() {
       fetch("/status").then(r=>r.json()).then(j=>{
         if(j.uploaded) window.location.href="/trim-ui";

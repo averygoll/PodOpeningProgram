@@ -39,6 +39,12 @@ if not exist "%BASE%trimmed.mp3" (
     timeout /t 1 >nul
     goto waitTrimmed
 )
+for %%I in ("%BASE%trimmed.mp3") do set "SIZE=%%~zI"
+if "%SIZE%"=="0" (
+    echo . waiting for write completion...
+    timeout /t 1 >nul
+    goto waitTrimmed
+)
 
 echo.
 echo [6/9] Converting trimmed.mp3 → Song.wav...
