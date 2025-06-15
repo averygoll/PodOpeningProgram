@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Scan to Upload</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-black text-white flex flex-col items-center justify-center min-h-screen px-4">
+  <h1 class="text-3xl font-bold mb-4">Upload Your Track</h1>
+  <p class="text-gray-400 mb-6">Scan this QR code with your phone to upload, then trim on desktop.</p>
+  <div class="bg-white p-4 rounded-lg mb-6">
+    <img id="qr" class="w-48 h-48" src="" alt="QR Code">
+  </div>
+  <p id="msg" class="text-gray-500 italic">Waiting for upload...</p>
+  <script>
+    fetch("/tunnel.txt")
+      .then(r => r.text())
+      .then(txt => {
+        const m = txt.match(/PUBLIC_URL=(https:\/\/[-\w.]+\.trycloudflare\.com)/);
+        if (m) {
+          const url = m[1] + "/upload-ui";
+          document.getElementById("qr").src =
+            "https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=" + encodeURIComponent(url);
+        }
+      });
+    function check() {
+      fetch("/status").then(r=>r.json()).then(j=>{
+        if(j.uploaded) window.location.href="/trim-ui";
+        else setTimeout(check,1000);
+      }).catch(()=>setTimeout(check,1000));
+    }
+    check();
+  </script>
+</body>
+</html>

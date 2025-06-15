@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>Trim 20 seconds Snippet</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/wavesurfer.js@6/dist/wavesurfer.min.js"></script>
+  <script src="https://unpkg.com/wavesurfer.js@6/dist/plugin/wavesurfer.regions.min.js"></script>
+  <style>
+    :root { --yellow: #FFD700; }
+    body {
+      background: #111; color: var(--yellow);
+      font-family: 'Ethnocentric', sans-serif;
+      overflow: hidden;
+    }
+    h1 {
+      text-align: center; margin-top: 1rem;
+      font-size: 3rem;
+    }
+    .badge {
+      background: rgba(255,215,0,0.2);
+      border: 2px solid var(--yellow);
+      padding: 0.5rem 1rem;
+      border-radius: 9999px;
+      font-size: 2rem;
+      color: var(--yellow);
+    }
+    #wave {
+      position: relative;
+      width: 100%; max-width: 800px; height: 200px;
+      margin: 2rem auto;
+      background: #111;
+      border: 2px solid var(--yellow);
+      border-radius: 0.72rem;
+    }
+    .wavesurfer-cursor { background: var(--yellow); }
+    .wavesurfer-region {
+      background: rgba(255,215,0,0.5) !important;
+    }
+    #saveBtn, #overlay button {
+      background: var(--yellow);
+      color: #000;
+      font-size: 2rem;
+      padding: 0.75rem 1.5rem;
+      border: none;
+      border-radius: 0.5rem;
+      text-transform: uppercase;
+      cursor: pointer;
+    }
+    #saveBtn:disabled { opacity: 0.5; cursor: not-allowed; }
+    #saveBtn { display: none; } /* hidden until Start pressed */
+    #overlay {
+      position: absolute; inset: 0;
+      background: rgba(0,0,0,0.8);
+      display: flex; align-items: center; justify-content: center;
+      z-index: 10;
+    }
+  </style>
+</head>
+<body class="flex flex-col items-center p-4">
+
+  <h1>Trim &amp; Save Your 20 Second Snippet</h1>
+
+  <div class="flex space-x-4 mt-4">
+    <div class="badge">Start: <span id="startTime">00:00</span></div>
+    <div class="badge">End:   <span id="endTime">00:20</span></div>
+  </div>
+
+  <div id="wave">
+    <div id="overlay">
+      <button id="startBtn">Tap to Start</button>
+    </div>
+  </div>
+
+  <button id="saveBtn" disabled class="mt-4">Save Snippet ▶</button>
+
+  <script>
+    // MM:SS formatter
+    const toMMSS = s => {
+      const m = Math.floor(s/60), sec = Math.floor(s%60);
+      return String(m).padStart(2,'0') + ':' + String(sec).padStart(2,'0');
+    };
+
+    const startEl = document.getElementById('startTime'),
+          endEl   = document.getElementById('endTime'),
+          saveBtn = document.getElementById('saveBtn'),
+          waveDiv = document.getElementById('wave'),
+          overlay = document.getElementById('overlay'),
+          startBtn= document.getElementById('startBtn');
+
+    // initialize WaveSurfer
+    const ws = WaveSurfer.create({
+      container: '#wave',
+      waveColor: '#333',
+      progressColor: '#555',
+      cursorColor: getComputedStyle(document.documentElement).getPropertyValue('--yellow'),
+      cursorWidth: 2,
+      normalize: true,
+      height: 200,
+      plugins: [ WaveSurfer.regions.create() ]
+    });
+
+    ws.load(`${window.location.origin}/latest.mp3`);
+
+    ws.on('ready', () => {
+      const dur = ws.getDuration(),
+            snippetLen = Math.min(20, dur);
+
+      const region = ws.addRegion({
+        start: 0,
+        end: snippetLen,
+        drag: true,
+        resize: false,
+        color: 'rgba(255,215,0,0.5)'
+      });
+
+      // initialize labels
+      startEl.textContent = toMMSS(region.start);
+      endEl.textContent   = toMMSS(region.end);
+
+      // loop on snippet out
+      region.on('out', () => {
+        ws.play(region.start, region.end);
+      });
+
+      // update labels + replay when region moved
+      region.on('update-end', () => {
+        startEl.textContent = toMMSS(region.start);
+        endEl.textContent   = toMMSS(region.end);
+        ws.play(region.start, region.end);
+      });
+
+      // tap-to-jump
+      waveDiv.addEventListener('click', e => {
+        if (overlay.style.display !== 'none') return;
+        const { left, width } = waveDiv.getBoundingClientRect(),
+              pct = (e.clientX - left)/width,
+              newStart = Math.min(Math.max(0, pct * dur), dur - snippetLen);
+        region.update({ start: newStart, end: newStart + snippetLen });
+        startEl.textContent = toMMSS(region.start);
+        endEl.textContent   = toMMSS(region.end);
+        ws.play(region.start, region.end);
+      });
+    });
+
+    // when user taps Start
+    startBtn.addEventListener('click', () => {
+      overlay.style.display = 'none';
+      // reveal & enable Save
+      saveBtn.style.display = 'block';
+      saveBtn.disabled = false;
+      // start playing
+      setTimeout(() => {
+        const r = Object.values(ws.regions.list)[0];
+        ws.play(r.start, r.end);
+      }, 50);
+    });
+
+    // Save Snippet → trim, then launch .lnk, then download
+    saveBtn.addEventListener('click', async () => {
+      saveBtn.disabled = true;
+      const res = await fetch('/trim', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ start: ws.regions.list[Object.keys(ws.regions.list)[0]].start,
+                               end:   ws.regions.list[Object.keys(ws.regions.list)[0]].end })
+      });
+      const js = await res.json();
+      if (res.ok) {
+        // open your launcher shortcut
+        const launcher = encodeURI('file:///C:/Users/agoll/Desktop/launcher.bat - Shortcut.lnk');
+        window.open(launcher);
+        // then navigate to trimmed file
+        window.location.href = js.url;
+      } else {
+        alert('Trim failed');
+        saveBtn.disabled = false;
+      }
+    });
+  </script>
+</body>
+</html>
